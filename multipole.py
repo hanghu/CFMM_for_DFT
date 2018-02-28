@@ -4,12 +4,12 @@ from scipy.special import lpmn, factorial
 class Vlm:
     """class for beter calculation of coefficients """
 
-    def __init__(self, level, dtype=np.complex128):
+    def __init__(self, p, dtype=np.complex128):
         self.dtype = dtype
-        self.level = level
-        self.size = level + 1
-        self.Vp = np.zeros(shape=(level+1, level+1), dtype=dtype) # variables for positive order
-        self.Vn = np.zeros(shape=(level, level), dtype=dtype) # variables for nagative order
+        self.p = p
+        self.size = p + 1
+        self.Vp = np.zeros(shape=(p+1, p+1), dtype=dtype) # variables for positive order
+        self.Vn = np.zeros(shape=(p, p), dtype=dtype) # variables for nagative order
 
     def setlm(self, l, m, v):
         if np.abs(m) > l or l < 0 :
@@ -53,6 +53,8 @@ class operation:
     #def __init__(self):
 
     def spherical_to_cartesian(r):
+        if type(r) == list:
+            
         x=np.zeros(shape=(len(r), 3))
         for i in range(0, len(r)):
             x[i][0] = r[i][0] * np.cos(r[i][1]) * np.sin(r[i][2])
@@ -131,11 +133,12 @@ class operation:
 
         return Mlm
 
-    def O_to_M(Ojk_x1_k, X12, p):
+    def O_to_M(Ojk_x1_k, X12):
         """
         converstion of multipole moments about origin 1 to taylor expansion
         coefficients about origin 2
         """
+        p = Ojk_x1_k.p
         Clmjk_X12 = operation.M_expansion(p*2, X12)
         Mlm_x2_k = Vlm(p)
         for l in range(0, p+1):
@@ -148,11 +151,12 @@ class operation:
 
         return Mlm_x2_k
 
-    def O_to_O(Ojk_x1_k, X21, p):
+    def O_to_O(Ojk_x1_k, X21):
         """
         translation of multipole moments about origin 1 to to multipole moments
         about origin 2
         """
+        p = Ojk_x1_k.p
         Tlmjk_X21 = operation.O_expansion(p, X21)
         Olm_x2_k = Vlm(p)
         for l in range(0, p+1):
@@ -171,6 +175,7 @@ class operation:
         translation of taylor expansion coefficients about origin 1 to to taylor
         expansion coefficients about origin 2
         """
+        p = Mjk_x1_k.p
         Tlmjk_X12 = operation.O_expansion(p*2, X12)
         Mlm_x2_k = Vlm(p)
         for l in range(0, p+1):
@@ -184,6 +189,53 @@ class operation:
 
         return Mlm_x2_k
 
-class fast_multiple_method:
-    def radix_sort():
+class fmm_level:
+    """
+    create level object for manipulation of each level
+    """
+    def __init__(self, level, WS_index=2):
+        self.level=level
+        self.num_boxes=2**(3*level)
+        self.boxlist = np.ndarray(shape=(self.num_boxes, ), dtype=object)
+        self.WS_index = WS_index
+        self.previous = None
+        self.next = None
+        self.boxes_generation()
+
+    def boxes_generation(self):
         return
+
+
+class fmm_box:
+    """
+    create box variables
+    """
+    def __init__(self, x):
+        self.coordinate = x
+        self.Olm = None
+        self.Mlm = None
+
+    def added_to_Olm(self, Olm_i):
+        if Olm == None:
+            Olm = Olm_i
+        else:
+            Olm.add(Olm_i)
+
+    def added_to_Mlm(self, Mlm_i):
+        if Mlm == None:
+            Mlm = Mlm_i
+        else:
+            Mlm.add(Mlm_i)
+
+    def boxes_interaction(self, other, X12):
+        p = self.omega.p
+        R12 = cartesian_to_spherical()
+        self.added_to_Mlm(operation.M_to_M(other.Olm, R12))
+        other.added_to_Mlm(operation.M_to_M(self.Olm, R21))
+
+
+
+class fmm_q_scouce:
+    """create charge source varibales"""
+    def __init__(self, q, x):
+        self.coordinate
