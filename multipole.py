@@ -81,7 +81,7 @@ class operation:
             r = []
             r.append(np.sqrt(sum( x * x )))
             r.append(np.arctan2(x[1], x[0]))
-            r.append(np.arccos(x[2] / r[0]))
+            r.append(np.arccos( x[2] / r[0]))
             r = np.array(r)
         elif len(np.shape(x)) == 2 and np.shape(x)[1] == 3:
             r=np.zeros(shape=(len(x), 3))
@@ -227,12 +227,20 @@ class fmm_level:
         self.box_list = np.ndarray(shape=(self.num_boxes, ), dtype=fmm_box)
         self.p = p
         self.WS_index = WS_index
-        self.previous = None
-        self.next = None
+        self.lower_level = None
+        self.higher_level = None
         self.box_construction(source)
+        self.NN_box_id_set_generation()
 
-    def next_level_construction(self):
+
+    def lower_level_construction(self):
+        if self.level == 1:
+            print("There is no lower_level")
+            return
+
         next_level = fmm_level(self.level-1, self, self.p)
+        self.lower_level = next_level
+        next_level.higher_level = self
         return next_level
 
     def box_construction(self, source):
@@ -244,22 +252,61 @@ class fmm_level:
                     for j in range(0, 3):
                         box_id_3D.append(int(qi.x[j] // self.box_size))
                     box_id_1D = self.index_3D_to_index_1D(box_id_3D)
-                    if self.box_list[box_id_1D] == None:
+                    if not self.box_list[box_id_1D]:
                         self.box_list[box_id_1D] = fmm_box(box_centers[box_id_1D])
                     qi.multipole_moment_expansion_to_box(self.box_list[box_id_1D], self.p)
 
         elif type(source) == fmm_level:
             box_centers = self.box_center_coordinates()
             for i in range(0, len(source.box_list)):
-                if source.box_list[i] != None:
+                if source.box_list[i]:
                     new_box_id = source.box_id_to_lower_level(i)
-                    if self.box_list[new_box_id] == None:
+                    if not self.box_list[new_box_id]:
                         self.box_list[new_box_id] = fmm_box(box_centers[new_box_id])
                     X21 = self.box_list[new_box_id].x - source.box_list[i].x
                     self.box_list[new_box_id].added_to_Olm(operation.O_to_O(source.box_list[i].Olm, X21))
-        else:
-            raise Exception("Wrong input source type")
+        #else:
+        #    raise Exception("Wrong input source type")
 
+    def NN_box_id_set_generation(self):
+        for i in range(0, len(self.box_list)):
+            if self.box_list[i]:
+                i_3D = np.array(self.index_1D_to_index_3D(i))
+                lower_bound = i_3D - self.WS_index
+                higher_bound = i_3D + self.WS_index
+                output_id_set = set()
+                num_boxes_1D = 2 ** self.level
+                for x in range(max(lower_bound[0],0), min(higher_bound[0]+1,num_boxes_1D)):
+                    for y in range(max(lower_bound[1],0), min(higher_bound[1]+1,num_boxes_1D)):
+                        for z in range(max(lower_bound[2],0), min(higher_bound[2]+1,num_boxes_1D)):
+                            i_xyz = self.index_3D_to_index_1D([x,y,z])
+                            if self.box_list[i_xyz]:
+                                output_id_set.add(i_xyz)
+                
+                output_id_set.remove(i)
+                self.box_list[i].set_NN_box_id_set(output_id_set)
+
+    def interactions_box_id_set(self, box_id):
+        interaction_set = set()
+        if not self.lower_level:
+            return interaction_set
+
+        parent_box_id = self.box_id_to_lower_level(box_id)
+        for pNN_box_id in self.lower_level.box_list[parent_box_id].NN_box_id_set:
+            interaction_set.update(self.lower_level.box_id_to_higher_level(pNN_box_id))
+        interaction_set.difference_update(self.box_list[box_id].NN_box_id_set)
+
+        for NN_box_id in interaction_set:
+            if not self.box_list[NN_box_id]:
+                interaction_set.remove(NN_box_id)
+
+        return interaction_set
+
+    def box_interactions(self):
+        for i in range(0, len(self.box_list)):
+            if self.box_list[i]:
+                for j in self.interactions_box_id_set(i):
+                    self.box_list[i].box_interaction(self.box_list[j])
 
     def box_center_coordinates(self):
         box_centers = np.zeros(shape = (len(self.box_list), 3))
@@ -269,6 +316,31 @@ class fmm_level:
                 box_centers[i][j] = self.box_size * (index_3D[j] + 0.5)
 
         return box_centers
+
+    """
+    def well_seperated_boxes(self, input_id):
+        return a set of box_id_3Ds well seperated with input box id
+        input_id_3D = np.array(self.index_1D_to_index_3D(input_id))
+        lower_bound_id1 = input_id - 2*self.WS_index - input_id%2
+        higher_bound_id1 = input_id + 2*self.WS_index + 1 - input_id%2
+        lower_bound_id2 = input_id - self.WS_index
+        higher_bound_id2 = input_id + self.WS_index
+        WS_boxes_id_3D = {}
+        for id_x in range(max(lower_bound_id1[0],0),
+                min(higher_bound_id1[0],self.level)+1):
+            for id_y in range(max(lower_bound_id1[1],0),
+                    min(higher_bound_id1[1],self.level)+1):
+                for id_z in range(max(lower_bound_id1[1],0),
+                        min(higher_bound_id1[2],self.level)+1):
+                    if (id_x < lower_bound_id2[0] or id_x > higher_bound_id2[0]
+                            or id_y < lower_bound_id2[1] or id_y > higher_bound_id2[1]
+                            or id_z < lower_bound_id2[2] or id_z > higher_bound_id2[2]):
+                        continue
+                    else:
+                        WS_boxes_id_3D.append([id_x, id_y, id_z])
+
+        return WS_boxes_id_3D
+    """
 
     def index_1D_to_index_3D_bin(self, oneD):
         """ total index convert to [x, y, z]"""
@@ -288,20 +360,39 @@ class fmm_level:
         return threeD
 
     def index_3D_to_index_1D(self, threeD):
-        bin_oneD = '0b'
+        oneD_bin = '0b'
         for i in (2,1,0):
-            bin_oneD += (self.level + 2 - len(bin(threeD[i]))) * '0' + bin(threeD[i])[2:]
+            oneD_bin += (self.level + 2 - len(bin(threeD[i]))) * '0' + bin(threeD[i])[2:]
 
-        return int(bin_oneD, 2)
+        return int(oneD_bin, 2)
 
     def box_id_to_lower_level(self, input_id):
+        """return parent box ids at level-1"""
+        if self.level == 1:
+            print("There is no lower_level")
+            return
         input_id_3D = self.index_1D_to_index_3D_bin(input_id)
         output_id = '0b'
         for i in (2, 1, 0):
-            output_id += (self.level + 1 - len(input_id_3D[i][:-1])) * '0' + input_id_3D[i][2:-1]
+            output_id +=  input_id_3D[i][2:-1]
 
         return int(output_id, 2)
 
+    def box_id_to_higher_level(self, input_id):
+        """return a set of children box ids at level+1"""
+        input_id_3D = self.index_1D_to_index_3D_bin(input_id)
+        output_id_set = set()
+
+        for x in ('0', '1'):
+            for y in ('0', '1'):
+                for z in ('0', '1'):
+                    output_id = '0b'
+                    output_id += input_id_3D[2][2:] + x
+                    output_id += input_id_3D[1][2:] + y
+                    output_id += input_id_3D[0][2:] + z
+                    output_id_set.add(int(output_id, 2))
+
+        return output_id_set
 
 class fmm_box:
     """
@@ -309,26 +400,31 @@ class fmm_box:
     """
     def __init__(self, x):
         self.x = x # coordinate
+        self.NN_box_id_set = set() ## set of neareast nerighbor boxes
         self.Olm = None
         self.Mlm = None
 
     def added_to_Olm(self, Olm_i):
-        if self.Olm == None:
+        if not self.Olm:
             self.Olm = Olm_i
         else:
             self.Olm.add(Olm_i)
 
     def added_to_Mlm(self, Mlm_i):
-        if self.Mlm == None:
+        if not self.Mlm:
             self.Mlm = Mlm_i
         else:
             self.Mlm.add(Mlm_i)
 
-    def boxes_interaction(self, other):
-        p = self.omega.p
+    def box_interaction(self, other):
+        p = self.Olm.p
         X12 = other.x - self.x
         self.added_to_Mlm(operation.M_to_M(other.Olm, X12))
-        other.added_to_Mlm(operation.M_to_M(self.Olm, -X12))
+
+    def set_NN_box_id_set(self, box_id_set):
+        if not len(self.NN_box_id_set):
+            self.NN_box_id_set = set()
+        self.NN_box_id_set.update(box_id_set)
 
 class fmm_q_source:
     """create charge source varibales"""
