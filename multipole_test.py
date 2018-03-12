@@ -126,11 +126,11 @@ class operation:
             for m in range(1, l+1):
                 m_power = np.power(-1, m)
 
-                p1 = P0lm[m][l] / factorial(l+m)
+                p1 = P0lm[m][l] * factorial(l-m)
                 P1lm.setlm(l, m, p1)
                 P1lm.setlm(l, -m, p1 * m_power)
 
-                p2 = P0lm[m][l] * factorial(l-m)
+                p2 = P0lm[m][l] / factorial(l+m)
                 P2lm.setlm(l, m, p2)
                 P2lm.setlm(l, -m, p2 * m_power)
 
@@ -158,6 +158,7 @@ class operation:
             for m in range(-l, l+1):
 
                 Mlm.setlm(l, m,  r_power * P1lm_r.getlm(l,m) * np.exp(m*r[2]*1j))
+                #print([l,m], P1lm_r.getlm(l,m),np.exp(m*r[2]*1j), Mlm.getlm(l,m))
 
         return Mlm
 
@@ -186,8 +187,13 @@ class operation:
                 temp = 0
                 for j in range(0, l+1):
                     for k  in range(-j, j+1):
+                        #print('C', [j+l, k+m], Clmjk_X21.getlm(j+l, k+m))
+                        #print('O', [j, k], Ojk_x1_k.getlm(j, k))
+                        #print('-')
                         temp += Clmjk_X21.getlm(j+l, k+m) * Ojk_x1_k.getlm(j, k)
                 Mlm_x2_k.setlm(l, m, temp)
+                #print('M new', [l, m], Mlm_x2_k.getlm(l, m))
+                #print('-------')
 
         return Mlm_x2_k
 
@@ -206,8 +212,13 @@ class operation:
                 for j in range(0, l+1):
                     for k  in range(-j, j+1):
                         if np.abs(m-k) <= l-j:
+                            #print('T', [l-j, m-k], Tlmjk_X21.getlm(l-j, m-k))
+                            #print('O', [j, k], Ojk_x1_k.getlm(j, k))
+                            #print('-')
                             temp += Tlmjk_X21.getlm(l-j, m-k) * Ojk_x1_k.getlm(j, k)
                 Olm_x2_k.setlm(l, m, temp)
+                #print('O new', [l, m], Olm_x2_k.getlm(l, m))
+                #print('-------')
 
         return Olm_x2_k
 
@@ -226,8 +237,13 @@ class operation:
                 for l in range(j, p+1):
                     for m  in range(-l, l+1):
                         if np.abs(m-k) <= l-j:
+                            #print('T', [l-j, m-k], Tjklm_X12.getlm(l-j, m-k))
+                            #print('M', [l, m], Mlm_x1_k.getlm(l, m))
+                            #print('-')
                             temp += Tjklm_X12.getlm(l-j, m-k) * Mlm_x1_k.getlm(l, m)
                 Mjk_x2_k.setlm(j, k, temp)
+                #print('M new', [j, k], Mjk_x2_k.getlm(j, k))
+                #print('-------')
 
         return Mjk_x2_k
 
