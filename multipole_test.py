@@ -114,25 +114,24 @@ class operation:
     def cartesian_scaling_by_input_factor(x, scale_factor):
         return (x - scale_factor[0]) / scale_factor[1]
 
-    def polynoimal_generation(p, z):
+    def polynoimal_generation(p, z, dtype=np.float64):
         [P0lm, _] = lpmn(p, p, z)
-        P1lm = Vlm(p)
-        P2lm = Vlm(p)
+        P1lm = Vlm(p, dtype=dtype)
+        P2lm = Vlm(p, dtype=dtype)
         for l in range(0, P1lm.size):
             # m = 0
             pf_l = factorial(l)
             P1lm.setlm(l, 0, P0lm[0][l] / pf_l)
             P2lm.setlm(l, 0, P0lm[0][l] * pf_l)
             for m in range(1, l+1):
-                m_power = np.power(-1, m)
 
-                p1 = P0lm[m][l] * factorial(l-m)
+                p1 = P0lm[m][l] / factorial(l+m)
                 P1lm.setlm(l, m, p1)
-                P1lm.setlm(l, -m, p1 * m_power)
+                P1lm.setlm(l, -m, p1)
 
-                p2 = P0lm[m][l] / factorial(l+m)
+                p2 = P0lm[m][l] * factorial(l-m)
                 P2lm.setlm(l, m, p2)
-                P2lm.setlm(l, -m, p2 * m_power)
+                P2lm.setlm(l, -m, p2)
 
         return [P1lm, P2lm]
 
@@ -215,7 +214,8 @@ class operation:
                             #print('T', [l-j, m-k], Tlmjk_X21.getlm(l-j, m-k))
                             #print('O', [j, k], Ojk_x1_k.getlm(j, k))
                             #print('-')
-                            temp += Tlmjk_X21.getlm(l-j, m-k) * Ojk_x1_k.getlm(j, k)
+                            i_power = np.power(1j, np.abs(m)-np.abs(k)-np.abs(m-k))
+                            temp += Tlmjk_X21.getlm(l-j, m-k) * Ojk_x1_k.getlm(j, k) * i_power
                 Olm_x2_k.setlm(l, m, temp)
                 #print('O new', [l, m], Olm_x2_k.getlm(l, m))
                 #print('-------')
@@ -240,7 +240,8 @@ class operation:
                             #print('T', [l-j, m-k], Tjklm_X12.getlm(l-j, m-k))
                             #print('M', [l, m], Mlm_x1_k.getlm(l, m))
                             #print('-')
-                            temp += Tjklm_X12.getlm(l-j, m-k) * Mlm_x1_k.getlm(l, m)
+                            i_power = np.power(1j, np.abs(m)-np.abs(k)-np.abs(m-k))
+                            temp += Tjklm_X12.getlm(l-j, m-k) * Mlm_x1_k.getlm(l, m) * i_power
                 Mjk_x2_k.setlm(j, k, temp)
                 #print('M new', [j, k], Mjk_x2_k.getlm(j, k))
                 #print('-------')
