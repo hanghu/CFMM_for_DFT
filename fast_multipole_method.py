@@ -376,7 +376,7 @@ class fmm_level:
                         self.box_init(box_id_1d)
 
                     self.box_list[box_id_1d].q_source_id_set.add(i)
-                    source[i].multipole_moment_expansion_to_box(self.box_list[box_id_1d], self.p)
+                    source[i].multipole_moment_expansion_to_box(self.box_list[box_id_1d], box_id_1d, self.p)
 
                 return
 
@@ -415,6 +415,7 @@ class fmm_level:
                     if self.box_list[output_id]:
                         output_id_set.add(output_id)
 
+        output_id_set.remove(box_id)
         return output_id_set
 
     def box_interactions_box_id_set(self, box_id):
@@ -425,30 +426,31 @@ class fmm_level:
         parent_box_id = self.box_id_at_parent_level(box_id)
 
         for pNN_box_id in self.parent_level.box_list[parent_box_id].NN_box_id_set:
-            interaction_set.update(self.parent_level.box_id_to_child_level(pNN_box_id))
+            interaction_set.update(self.parent_level.box_id_at_child_level(pNN_box_id))
         interaction_set.difference_update(self.box_list[box_id].NN_box_id_set)
 
         return interaction_set
 
     def box_interactions(self):
-        if not self.parent_level:
-            return
-
-        for i in range(0, len(self.box_list)):
-            if self.box_list[i]:
-                for j in self.box_interactions_box_id_set(i):
-                    self.box_list[i].box_interaction(self.box_list[j])
+        if self.parent_level:
+            print("interaction:", self.level)
+            for i in range(0, len(self.box_list)):
+                if self.box_list[i]:
+                    interaction_set = self.box_interactions_box_id_set(i)
+                    if interaction_set:
+                        for j in interaction_set:
+                            self.box_list[i].box_interaction(self.box_list[j])
 
     def interaction_with_child_level(self):
         if type(self.child_level) != fmm_level:
             print("Start to evalution J far field")
+            print(self.level)
             J_far_field = np.zeros(len(self.child_level))
-            for i in range(0, len(self.child_level)):
-                if not self.box_list[self.child_level[i].box_id].Llm:
-                    J_far_field[i] = 0.
-                else:
-                    J_far_field[i] = self.box_list[self.child_level[i].box_id].Llm.product( \
-                        self.child_level[i].Mlm).sum().real
+            for i in range(0, len(self.box_list)):
+                if self.box_list[i] and self.box_list[i].Llm:
+                        for j in self.box_list[i].q_source_id_set:
+                            J_far_field[j] = self.box_list[i].Llm.product(\
+                                self.child_level[j].Mlm).sum().real
 
             return J_far_field
 
@@ -460,7 +462,7 @@ class fmm_level:
                         Llm_translation = operation.L2L(self.box_list[i].Llm, X21)
                         self.child_level.box_list[c_box_id].added_to_Llm(Llm_translation)
 
-        return None
+        return self.level
 
 
     def index_1d_to_3d(self, i_1d):
@@ -471,7 +473,6 @@ class fmm_level:
         for j in range(0, self.level):
             for k  in range(0, 3):
                 i_3d_bin_str[k] = bin(i_1d >> (j*3 + k))[-1] + i_3d_bin_str[k]
-
         i_3d = []
         for j in range(0, 3):
             i_3d.append(int(i_3d_bin_str[j], 2))
@@ -532,7 +533,6 @@ class fmm_box:
             self.Llm.added_to_self(Llm_i)
 
     def box_interaction(self, other):
-        p = other.Llm.degree
         X21 = other.x - self.x
         self.added_to_Llm(operation.M2L(other.Mlm, X21))
 
@@ -550,7 +550,8 @@ class fmm_q_source:
         self.box_id = 0
         self.J_far_field = 0.
 
-    def multipole_moment_expansion_to_box(self, box, p):
+    def multipole_moment_expansion_to_box(self, box, box_id, p):
+        self.box_id = box_id
         r = operation.cartesian_to_spherical(self.x - box.x)
         self.Mlm = operation.M_expansion(p, r)
         box.added_to_Mlm(self.Mlm.scale(self.q))
