@@ -2,6 +2,44 @@ import numpy as np
 from scipy.special import factorial2 as fc2
 from scipy.special import factorial as fc
 
+def fmm(q_source, btm_level, p, WS_index=2):
+    """the fmm engine"""
+    f_level_i = fmm_level(q_source, btm_level, p, WS_index)
+    #Construction of boxes at each level and translation of Mlm to parent level
+    while (f_level_i.num_boxes_1d  - 2 >=  WS_index):
+        f_level_i = f_level_i.parent_level_construction()
+
+    print('constructions finished, procede to evaluation of interactions')
+    #Interations at each level and Llm translation to child level
+    while (type(f_level_i.child_level) == fmm_level):
+        f_level_i = f_level_i.child_level
+        f_level_i.box_interactions()
+        f_level_i.Llm_translation_to_child_level()
+
+    print("Start to evaluating J matrix based on near and far field")
+    J_far_field = np.zeros(len(f_level_i.child_level))
+    J_near_field = np.zeros(len(f_level_i.child_level))
+    for box_i in range(0, len(f_level_i.box_list)):
+        if f_level_i.box_list[box_i]:
+            # evaluating J_far_field
+            if f_level_i.box_list[box_i].Llm:
+                for q_i in f_level_i.box_list[box_i].q_source_id_set:
+                    J_far_field[q_i] = f_level_i.box_list[box_i].Llm.product(\
+                        f_level_i.child_level[q_i].Mlm).sum().real
+            # evaluating J_near_field
+            for q_i in f_level_i.box_list[box_i].q_source_id_set:
+                for q_j in f_level_i.box_list[box_i].q_source_id_set:
+                    if q_i != q_j:
+                        J_near_field[q_i] += 1 / operation.distance_cal\
+                            (f_level_i.child_level[q_i].x, f_level_i.child_level[q_j].x)
+                for NN_box_j in f_level_i.box_list[box_i].NN_box_id_set:
+                    for q_j in f_level_i.box_list[NN_box_j].q_source_id_set:
+                        J_near_field[q_i] += 1 / operation.distance_cal\
+                            (f_level_i.child_level[q_i].x, f_level_i.child_level[q_j].x)
+    print("J matrix ecaluation finished!")
+
+    return [J_far_field, J_near_field]
+
 class Vlm:
     """
     class value matrix for storage of multipole or local expansion coefficients
@@ -272,7 +310,7 @@ class operation:
 
         Ljk_x2 = Vlm(p)
 
-        for j in range(0, p+1):
+        for j in range(0, p+1):       
             for k in range(-j, j+1):
                 Tlm_lr = [j, j+p]; Tlm_mr = [k-p, k+p]
 
@@ -326,7 +364,8 @@ class fmm_level:
     """
     create level object for manipulation of each level
     """
-    def __init__(self, level, source, p, WS_index=2):
+    def __init__(self, source, level, p, WS_index):
+        print("constructions of level ", level)
         self.level=level
         self.num_boxes_1d = 2 ** self.level
         self.num_boxes = self.num_boxes_1d ** 3
@@ -338,14 +377,12 @@ class fmm_level:
         self.box_construction(source)
         self.NN_box_id_set_generation()
 
-
-
     def parent_level_construction(self):
         if self.num_boxes_1d * 2 - 2 < self.WS_index:
             print("There is no parent_level avaiable for interactoions")
             return None
 
-        parent_level = fmm_level(self.level-1, self, self.p, self.WS_index)
+        parent_level = fmm_level(self, self.level-1, self.p, self.WS_index)
         self.parent_level = parent_level
 
         return parent_level
@@ -359,7 +396,6 @@ class fmm_level:
             box_center_coordinate[j] = (box_id_3d[j] + 0.5) / self.num_boxes_1d
 
         self.box_list[box_id_1d] = fmm_box(box_center_coordinate)
-
 
     def box_construction(self, source):
         self.child_level = source
@@ -376,7 +412,7 @@ class fmm_level:
                         self.box_init(box_id_1d)
 
                     self.box_list[box_id_1d].q_source_id_set.add(i)
-                    source[i].multipole_moment_expansion_to_box(self.box_list[box_id_1d], box_id_1d, self.p)
+                    source[i].multipole_moment_expansion_to_box(self.box_list[box_id_1d], self.p)
 
                 return
 
@@ -433,7 +469,7 @@ class fmm_level:
 
     def box_interactions(self):
         if self.parent_level:
-            print("interaction:", self.level)
+            print("interactions at level ", self.level)
             for i in range(0, len(self.box_list)):
                 if self.box_list[i]:
                     interaction_set = self.box_interactions_box_id_set(i)
@@ -441,29 +477,19 @@ class fmm_level:
                         for j in interaction_set:
                             self.box_list[i].box_interaction(self.box_list[j])
 
-    def interaction_with_child_level(self):
+    def Llm_translation_to_child_level(self):
         if type(self.child_level) != fmm_level:
-            print("Start to evalution J far field")
-            print(self.level)
-            J_far_field = np.zeros(len(self.child_level))
-            for i in range(0, len(self.box_list)):
-                if self.box_list[i] and self.box_list[i].Llm:
-                        for j in self.box_list[i].q_source_id_set:
-                            J_far_field[j] = self.box_list[i].Llm.product(\
-                                self.child_level[j].Mlm).sum().real
-
-            return J_far_field
+            return
 
         for i in range(0, len(self.box_list)):
             if self.box_list[i]:
                 if self.box_list[i].Llm:
                     for c_box_id in self.box_id_at_child_level(i):
                         X21= self.box_list[i].x - self.child_level.box_list[c_box_id].x
-                        Llm_translation = operation.L2L(self.box_list[i].Llm, X21)
-                        self.child_level.box_list[c_box_id].added_to_Llm(Llm_translation)
+                        self.child_level.box_list[c_box_id].added_to_Llm \
+                            (operation.L2L(self.box_list[i].Llm, X21))
 
-        return self.level
-
+        return
 
     def index_1d_to_3d(self, i_1d):
         """ global index at self.level convert to [x, y, z] using deinterleaving"""
@@ -547,11 +573,8 @@ class fmm_q_source:
         self.x = x #coordinate
         self.q = q
         self.Mlm = None
-        self.box_id = 0
-        self.J_far_field = 0.
 
-    def multipole_moment_expansion_to_box(self, box, box_id, p):
-        self.box_id = box_id
+    def multipole_moment_expansion_to_box(self, box, p):
         r = operation.cartesian_to_spherical(self.x - box.x)
         self.Mlm = operation.M_expansion(p, r)
         box.added_to_Mlm(self.Mlm.scale(self.q))
