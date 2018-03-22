@@ -1,41 +1,46 @@
 import numpy as np
 from scipy.special import factorial2 as fc2
 from scipy.special import factorial as fc
+from scipy.special import erf
 
-def fmm(q_source, btm_level, p, WS_index=2):
+def fmm(q_source, btm_level, p, scale_factor, WS_index=2):
     """the fmm engine"""
-    f_level_i = fmm_level(q_source, btm_level, p, WS_index)
-    #Construction of boxes at each level and translation of Mlm to parent level
-    while (f_level_i.num_boxes_1d  - 2 >=  WS_index):
-        f_level_i = f_level_i.parent_level_construction()
+    #initializing btm level
+    level_i = fmm_level(btm_level, p, WS_index)
+    for i in range(0, len(q_source)):
+        level_i.add_source_point(q_source[i], i)
+
+    #Construction of boxes at pratent levels and translation of Mlm to parent level
+    while level_i.num_boxes_1d  - 2 >=  WS_index:
+        level_i = level_i.parent_level_construction()
 
     print('constructions finished, procede to evaluation of interactions')
     #Interations at each level and Llm translation to child level
-    while (type(f_level_i.child_level) == fmm_level):
-        f_level_i = f_level_i.child_level
-        f_level_i.box_interactions()
-        f_level_i.Llm_translation_to_child_level()
+    while type(level_i.child_level) == fmm_level:
+        level_i = level_i.child_level
+        level_i.box_interactions()
+        level_i.Llm_translation_to_child_level()
 
     print("Start to evaluating J matrix based on near and far field")
-    J_far_field = np.zeros(len(f_level_i.child_level))
-    J_near_field = np.zeros(len(f_level_i.child_level))
-    for box_i in range(0, len(f_level_i.box_list)):
-        if f_level_i.box_list[box_i]:
+    J_far_field = np.zeros(len(q_source))
+    J_near_field = np.zeros(len(q_source))
+    for box_i in range(0, len(level_i.box_list)):
+        if level_i.box_list[box_i]:
             # evaluating J_far_field
-            if f_level_i.box_list[box_i].Llm:
-                for q_i in f_level_i.box_list[box_i].q_source_id_set:
-                    J_far_field[q_i] = f_level_i.box_list[box_i].Llm.product(\
-                        f_level_i.child_level[q_i].Mlm).sum().real
+            if level_i.box_list[box_i].Llm:
+                for q_i in level_i.box_list[box_i].q_source_id_set:
+                    J_far_field[q_i] = level_i.box_list[box_i].Llm.product(\
+                        q_source[q_i].Mlm).sum().real / scale_factor
             # evaluating J_near_field
-            for q_i in f_level_i.box_list[box_i].q_source_id_set:
-                for q_j in f_level_i.box_list[box_i].q_source_id_set:
+            for q_i in level_i.box_list[box_i].q_source_id_set:
+                for q_j in level_i.box_list[box_i].q_source_id_set:
                     if q_i != q_j:
-                        J_near_field[q_i] += 1 / operation.distance_cal\
-                            (f_level_i.child_level[q_i].x, f_level_i.child_level[q_j].x)
-                for NN_box_j in f_level_i.box_list[box_i].NN_box_id_set:
-                    for q_j in f_level_i.box_list[NN_box_j].q_source_id_set:
-                        J_near_field[q_i] += 1 / operation.distance_cal\
-                            (f_level_i.child_level[q_i].x, f_level_i.child_level[q_j].x)
+                        J_near_field[q_i] += q_source[q_i].\
+                            near_field_interaction(q_source[q_j], scale_factor)
+                for NN_box_j in level_i.NN_box_id_set(box_i):
+                    for q_j in level_i.box_list[NN_box_j].q_source_id_set:
+                        J_near_field[q_i] += q_source[q_i].\
+                            near_field_interaction(q_source[q_j], scale_factor)
     print("J matrix ecaluation finished!")
 
     return [J_far_field, J_near_field]
@@ -310,7 +315,7 @@ class operation:
 
         Ljk_x2 = Vlm(p)
 
-        for j in range(0, p+1):       
+        for j in range(0, p+1):
             for k in range(-j, j+1):
                 Tlm_lr = [j, j+p]; Tlm_mr = [k-p, k+p]
 
@@ -364,25 +369,25 @@ class fmm_level:
     """
     create level object for manipulation of each level
     """
-    def __init__(self, source, level, p, WS_index):
-        print("constructions of level ", level)
+    def __init__(self, level, p, WS_index):
+        print("constructions of level " + str(level) + " with WS_index=" + str(WS_index))
         self.level=level
         self.num_boxes_1d = 2 ** self.level
         self.num_boxes = self.num_boxes_1d ** 3
-        self.box_list = np.ndarray(shape=(self.num_boxes), dtype=fmm_box)
+        self.box_list = None
         self.p = p
         self.WS_index = WS_index
         self.parent_level = None
         self.child_level = None
-        self.box_construction(source)
-        self.NN_box_id_set_generation()
 
     def parent_level_construction(self):
         if self.num_boxes_1d * 2 - 2 < self.WS_index:
             print("There is no parent_level avaiable for interactoions")
             return None
 
-        parent_level = fmm_level(self, self.level-1, self.p, self.WS_index)
+        parent_level = fmm_level(self.level-1, self.p, self.WS_index)
+        parent_level.child_level = self
+        parent_level.box_construction_by_child_level(self)
         self.parent_level = parent_level
 
         return parent_level
@@ -397,51 +402,44 @@ class fmm_level:
 
         self.box_list[box_id_1d] = fmm_box(box_center_coordinate)
 
-    def box_construction(self, source):
-        self.child_level = source
+    def add_source_point(self, source, source_id):
+        if type(source) == fmm_q_particle \
+                or type(source) == fmm_q_gaussain_distribution:
+            if type(self.box_list) != np.ndarray:
+                self.box_list = np.ndarray(self.num_boxes, dtype=fmm_box)
+            box_id_3d = []
+            for j in range(0, 3):
+                box_id_3d.append(int(source.x[j] * self.num_boxes_1d))
+            box_id_1d = self.index_3d_to_1d(box_id_3d)
 
-        if type(source) == (np.ndarray or list):
-            if type(source[0]) == fmm_q_source:
-                for i in range(0, len(source)):
-                    box_id_3d = []
-                    for j in range(0, 3):
-                        box_id_3d.append(int(source[i].x[j] * self.num_boxes_1d))
-                    box_id_1d = self.index_3d_to_1d(box_id_3d)
+            if not self.box_list[box_id_1d]:
+                self.box_init(box_id_1d)
 
-                    if not self.box_list[box_id_1d]:
-                        self.box_init(box_id_1d)
+            self.box_list[box_id_1d].q_source_id_set.add(source_id)
+            source.multipole_moment_expansion_to_box(self.box_list[box_id_1d], self.p)
 
-                    self.box_list[box_id_1d].q_source_id_set.add(i)
-                    source[i].multipole_moment_expansion_to_box(self.box_list[box_id_1d], self.p)
-
-                return
-
-        elif type(source) == fmm_level:   #box construction for parent_level
-            for i in range(0, len(source.box_list)):
-                if source.box_list[i]:
-                    new_box_id = source.box_id_at_parent_level(i)
-
-                    if not self.box_list[new_box_id]:
-                        self.box_init(new_box_id)
-
-                    X12 =  self.box_list[new_box_id].x - source.box_list[i].x
-                    self.box_list[new_box_id].added_to_Mlm(operation.M2M(source.box_list[i].Mlm, X12))
-
-        elif type(source) == str:
-            if source == "test mode":
-                print("Entering test mode of this class")
         else:
             raise Exception("Wrong input source type")
 
-    def NN_box_id_set_generation(self):
-        for i in range(0, len(self.box_list)):
-            if self.box_list[i]:
-                self.box_list[i].set_NN_box_id_set(self.NN_box_id_set(i))
+    def box_construction_by_child_level(self, child_level):
+        #box construction by child level
 
-    def NN_box_id_set(self, box_id):
+        for i in range(0, len(child_level.box_list)):
+            if child_level.box_list[i]:
+                if type(self.box_list) != np.ndarray:
+                    self.box_list = np.ndarray(self.num_boxes, dtype=fmm_box)
+
+                new_box_id = child_level.box_id_at_parent_level(i)
+                if not self.box_list[new_box_id]:
+                    self.box_init(new_box_id)
+
+                X12 =  self.box_list[new_box_id].x - child_level.box_list[i].x
+                self.box_list[new_box_id].added_to_Mlm(operation.M2M(child_level.box_list[i].Mlm, X12))
+
+    def NN_box_id_set(self, box_id, WS_index=self.WS_index):
         box_id_3d = np.array(self.index_1d_to_3d(box_id))
-        id_max = box_id_3d - self.WS_index
-        id_min = box_id_3d + self.WS_index
+        id_max = box_id_3d - WS_index
+        id_min = box_id_3d + WS_index
 
         output_id_set = set()
         for x in range(max(id_max[0],0), min(id_min[0]+1,self.num_boxes_1d)):
@@ -454,16 +452,16 @@ class fmm_level:
         output_id_set.remove(box_id)
         return output_id_set
 
-    def box_interactions_box_id_set(self, box_id):
+    def box_interactions_box_id_set(self, box_id, WS_index=self.WS_index):
         interaction_set = set()
         if not self.parent_level:
             return interaction_set
 
         parent_box_id = self.box_id_at_parent_level(box_id)
 
-        for pNN_box_id in self.parent_level.box_list[parent_box_id].NN_box_id_set:
+        for pNN_box_id in self.parent_level.NN_box_id_set(parent_box_id, WS_index):
             interaction_set.update(self.parent_level.box_id_at_child_level(pNN_box_id))
-        interaction_set.difference_update(self.box_list[box_id].NN_box_id_set)
+        interaction_set.difference_update(self.NN_box_id_set(box_id))
 
         return interaction_set
 
@@ -478,17 +476,14 @@ class fmm_level:
                             self.box_list[i].box_interaction(self.box_list[j])
 
     def Llm_translation_to_child_level(self):
-        if type(self.child_level) != fmm_level:
-            return
-
-        for i in range(0, len(self.box_list)):
-            if self.box_list[i]:
-                if self.box_list[i].Llm:
-                    for c_box_id in self.box_id_at_child_level(i):
-                        X21= self.box_list[i].x - self.child_level.box_list[c_box_id].x
-                        self.child_level.box_list[c_box_id].added_to_Llm \
-                            (operation.L2L(self.box_list[i].Llm, X21))
-
+        if self.child_level:
+            for i in range(0, len(self.box_list)):
+                if self.box_list[i]:
+                    if self.box_list[i].Llm:
+                        for c_box_id in self.box_id_at_child_level(i):
+                            X21= self.box_list[i].x - self.child_level.box_list[c_box_id].x
+                            self.child_level.box_list[c_box_id].added_to_Llm \
+                                (operation.L2L(self.box_list[i].Llm, X21))
         return
 
     def index_1d_to_3d(self, i_1d):
@@ -541,7 +536,6 @@ class fmm_box:
     """
     def __init__(self, x):
         self.x = x # coordinate of center
-        self.NN_box_id_set = set() ## set of ids of neareast nerighbor box + self
         self.q_source_id_set = set()
         self.Mlm = None
         self.Llm = None
@@ -562,15 +556,10 @@ class fmm_box:
         X21 = other.x - self.x
         self.added_to_Llm(operation.M2L(other.Mlm, X21))
 
-    def set_NN_box_id_set(self, box_id_set):
-        if not len(self.NN_box_id_set):
-            self.NN_box_id_set = set()
-        self.NN_box_id_set.update(box_id_set)
-
-class fmm_q_source:
-    """create charge source varibales"""
+class fmm_q_particle:
+    """create particle charge source varibales"""
     def __init__(self, x, q):
-        self.x = x #coordinate
+        self.x = x # cartesian coordinate
         self.q = q
         self.Mlm = None
 
@@ -578,3 +567,28 @@ class fmm_q_source:
         r = operation.cartesian_to_spherical(self.x - box.x)
         self.Mlm = operation.M_expansion(p, r)
         box.added_to_Mlm(self.Mlm.scale(self.q))
+
+    def near_field_interaction(self, other, scale_factor):
+        return 1 / (operation.distance_cal(self.x, other.x) * scale_factor)
+
+class fmm_q_gaussain_distribution:
+    """create charge source varibales with spherical gaussain distribution"""
+    def __init__(self, x, a, k):
+        self.x = x # cartesian coordinate
+        self.a = a # exponantial coefficient
+        self.k = k # pre-factor
+        self.M00 = k * np.power(np.pi/a, 3/2)
+        self.Mlm = None
+
+    def multipole_moment_expansion_to_box(self, box, p):
+        Mlm_init = Vlm(p)
+        Mlm_init.setlm(0, 0, self.M00)
+        self.Mlm = operation.M2M(Mlm_init, self.x-box.x)
+        box.added_to_Mlm(self.Mlm)
+
+    def near_field_interaction(self, other, scale_factor):
+        pre_factor = np.power(np.pi, 3) * self.k * other.k / ( np.power(self.a * other.a, 3/2)\
+            * operation.distance_cal(self.x, other.x) * scale_factor)
+        t_sqrt = np.sqrt(self.a * other.a/ (self.a + other.a)) \
+            * operation.distance_cal(self.x, other.x) * scale_factor
+        return pre_factor * erf(t_sqrt)
