@@ -10,7 +10,7 @@ from fast_multipole_method import operation
 from fast_multipole_method import fmm_level
 from fast_multipole_method import fmm_q_gaussain_distribution as fq
 
-def cfmm(q_source, btm_level, p, scale_factor, WS_ref=2):
+def cfmm(q_source, btm_level, p, scale_factor, WS_ref=2, far_field_only=False):
     """The CFMM engine"""
 
     # initializing the bottom level
@@ -84,9 +84,8 @@ def cfmm(q_source, btm_level, p, scale_factor, WS_ref=2):
             interaction_levels.add(level_i.right_child_level)
             level_i.Llm_translation_to_right_child_level()
 
-    print("Start to evaluating J matrix based on near and far field")
+    print("Start to evaluating J far field matrix")
     J_far_field = np.zeros(len(q_source))
-    J_near_field = np.zeros(len(q_source))
     for level_i in btm_level_list:
         if level_i:
             for box_i in range(0, len(level_i.box_list)):
@@ -96,6 +95,18 @@ def cfmm(q_source, btm_level, p, scale_factor, WS_ref=2):
                         for q_i in level_i.box_list[box_i].q_source_id_set:
                             J_far_field[q_i] = level_i.box_list[box_i].Llm.product(\
                                 q_source[q_i].Mlm).sum().real / scale_factor
+
+    if far_field_only:
+        print("J far field matrix ecaluation finished!")
+        return J_far_field
+
+    print("Start to evaluating J far field matrix")
+    J_near_field = np.zeros(len(q_source))
+    for level_i in btm_level_list:
+        if level_i:
+            for box_i in range(0, len(level_i.box_list)):
+                if level_i.box_list[box_i]:
+
                     # evaluating J_near_field
                     for q_i in level_i.box_list[box_i].q_source_id_set:
                         #within same WS_index:
@@ -120,7 +131,6 @@ def cfmm(q_source, btm_level, p, scale_factor, WS_ref=2):
                                         J_near_field[q_i] += q_source[q_i].\
                                             near_field_interaction(q_source[q_j], scale_factor)
 
-
     print("J matrix ecaluation finished!")
 
     return [J_far_field, J_near_field]
@@ -135,8 +145,6 @@ class cfmm_level(fmm_level):
         self.right_child_level = right_child_level
         right_child_level.parent_level = self
         self.box_construction_by_child_level(right_child_level)
-
-
 
     def parent_level_construction(self, parent_ws_index):
         parent_level = cfmm_level(self.level-1, self.p, parent_ws_index)
