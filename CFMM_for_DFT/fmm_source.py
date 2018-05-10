@@ -54,7 +54,7 @@ class gs_q_dist(abstract_source):
             * operation.distance_cal(self.x, other.x) * scale_factor
         return pre_factor * erf(t_sqrt)
 
-class generalized_ggq_dist(abstract_source):
+class ggq_dist(abstract_source):
     """implementation of generalized gaussian charge disctribution"""
 
     def __init__(self, x, a, k, pow):
@@ -64,38 +64,39 @@ class generalized_ggq_dist(abstract_source):
         self.pow = pow # three d cartesian power [t,u,v]
 
     def M_expansion_to_box(self, box, p):
-        self.Mlm = Vlm(p)
-        self.Mlm_init()
+        self.Mlm_init(p)
         super().M_expansion_to_box(box)
 
     def near_field_interaction(self, other, scale_factor):
         print("call direct evaluation")
-        
 
-    def Mlm.init(self):
+
+    def Mlm_init(self, p):
+        self.Mlm = Vlm(p)
         v = self.pow[2]
         if self.pow[0] < self.pow[1]:
-            t = self[1]
-            u = self[0]
+            t = self.pow[1]
+            u = self.pow[0]
         else:
-            t = self[0]
-            u = self[1]
+            t = self.pow[0]
+            u = self.pow[1]
 
         factor1 = np.power(np.pi/self.a, 3/2)
         factor2 = 1 / (2 * self.a)
 
-        if t==0 & u==0 & v==0:
+        if t==0 and u==0 and v==0:
             self.Mlm.setlm(0, 0, self.k * factor1)
 
-        elif t==1 & u==0 & v==0:
-            w10 = self.k * factor2 * factor1 / 2
-            self.Mlm.setlm(1, 0,  w00)
 
-        elif t==0 & u==0 & v==1:
+        elif t==1 and u==0 and v==0:
+            w10 = self.k * factor2 * factor1 / 2
+            self.Mlm.setlm(1, 0,  w10)
+
+        elif t==0 and u==0 and v==1:
             w11 = self.k * factor2 * factor1
             self.Mlm.setlm(1, 1, w11)
 
-        elif t==2 & u==0 & v==0:
+        elif t==2 and u==0 and v==0:
             w00 = self.k * factor2 * factor1
             w20 = - w00 * factor2 / 2
             w22 = - w20 / 2
@@ -103,15 +104,15 @@ class generalized_ggq_dist(abstract_source):
             self.Mlm.setlm(2, 0, w20)
             self.Mlm.setlm(2, 2, w22)
 
-        elif t==1 & u==1 & v==0:
+        elif t==1 and u==1 and v==0:
             w22 = - self.k * factor2 * factor1 * 1j / 4
             self.Mlm.setlm(2, 2, w22)
 
-        elif t==1 & u==0 & v==1:
+        elif t==1 and u==0 and v==1:
             w21 = self.k * factor2 * factor1 / 2
-            self.Mlm.setlm(2, 1, w22)
+            self.Mlm.setlm(2, 1, w21)
 
-        elif t==0 & u==0 & v==2:
+        elif t==0 and u==0 and v==2:
             w00 = self.k * factor2 * factor1
             w20 = w00 * factor2
             self.Mlm.setlm(0, 0, w00)
@@ -123,5 +124,7 @@ class generalized_ggq_dist(abstract_source):
                     self.Mlm.setlm(l, m, self.Mlm.getlm(l, m).conjugate() * np.power(-1j, m))
 
         for l in range(0, min(3,self.Mlm.degree+1)):
-            for m in range(-1, 0):
+            for m in range(-l, 0):
                 self.Mlm.setlm(l, m, self.Mlm.getlm(l, -m).conjugate())
+
+        return self.Mlm
