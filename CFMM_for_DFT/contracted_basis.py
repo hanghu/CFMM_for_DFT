@@ -70,23 +70,23 @@ class shell_pair:
         C_t = np.zeros(pow_max[0]+1)
         for t in range(0, pow_max[0]+1):
             for i in range(0, min(self.mu.pow[0], t)+1):
-                print( 't:', [t,i] )
                 C_t[t] += binom(self.mu.pow[0], i) * np.power(X_p[0] - self.mu.x[0], self.mu.pow[0]-i) \
                     * binom(self.nu.pow[0], t-i) * np.power(X_p[0] - self.nu.x[0], self.nu.pow[0]-t+i)
+            print( "t=", t, "; C_t=", C_t[t])
 
         C_u = np.zeros(pow_max[1]+1)
         for t in range(0, pow_max[1]+1):
             for i in range(0, min(self.mu.pow[1], t)+1):
-                print( 'u:', [t,i] )
                 C_u[t] += binom(self.mu.pow[1], i) * np.power(X_p[1] - self.mu.x[1], self.mu.pow[1]-i) \
                     * binom(self.nu.pow[1], t-i) * np.power(X_p[1] - self.nu.x[1], self.nu.pow[1]-t+i)
+            print( "u=", t, "; C_u=", C_u[t])
 
         C_v = np.zeros(pow_max[2]+1)
         for t in range(0, pow_max[2]+1):
             for i in range(0, min(self.mu.pow[2], t)+1):
-                print( 'v:', [t,i] )
                 C_v[t] += binom(self.mu.pow[2], i) * np.power(X_p[2] - self.mu.x[2], self.mu.pow[2]-i) \
                     * binom(self.nu.pow[2], t-i) * np.power(X_p[2] - self.nu.x[2], self.nu.pow[2]+i-t)
+            print( "v=", t, "; C_v=", C_v[t])
 
         Mlm = Vlm(p)
         for t in range(0, len(C_t)):
