@@ -3,6 +3,7 @@ from scipy.special import factorial2 as fc2
 from scipy.special import factorial as fc
 from scipy.special import erf
 from fmm_source import q_particle, gs_q_dist
+from contracted_basis import shell_pair
 from basic_operations import Vlm, operation
 
 
@@ -91,7 +92,7 @@ class fmm_level:
         self.box_list[box_id_1d] = fmm_box(box_center_coordinate)
 
     def add_source_point(self, source, source_id):
-        if type(source) == q_particle \
+        if type(source) == shell_pair or q_particle \
                 or type(source) == gs_q_dist:
             if type(self.box_list) != np.ndarray:
                 self.box_list = np.ndarray(self.num_boxes, dtype=fmm_box)

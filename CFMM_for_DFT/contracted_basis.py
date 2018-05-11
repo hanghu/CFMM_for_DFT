@@ -1,6 +1,6 @@
 import numpy as np
 from fmm_source import ggq_dist
-from basic_operations import Vlm
+from basic_operations import Vlm, operation
 from scipy.special import binom
 
 class CAO_basis:
@@ -47,46 +47,53 @@ class shell_pair:
                 self.X_p[i][j] = (mu.a[i] * mu.x + nu.a[j] * nu.x) / self.a_p[i][j]
 
         self.a_k /= self.a_p
+        self.Mlm_array = None
         self.Mlm = None
 
 
     def M_expansion_to_box(self, box, p):
         self.Mlm_init(p)
-
+        self.Mlm_array = np.reshape(self.Mlm_array, np.prod(self.Mlm_array.shape))
+        self.X_p = np.reshape(self.X_p, (len(self.Mlm_array), 3))
+        self.Mlm = Vlm(p)
+        for i in range(0, len(self.Mlm_array)):
+            self.Mlm.added_to_self(operation.M2M(self.Mlm_array[i], self.X_p[i]-box.x))
+        box.added_to_Mlm(self.Mlm)
 
     def Mlm_init(self, p):
-        self.Mlm = np.ndarray(shape=self.a_k.shape, dtype=Vlm)
+        self.Mlm_array = np.ndarray(shape=self.a_k.shape, dtype=Vlm)
 
-        dis_sq = sum( (self.mu.x-self.nu.x) * (self.mu.x-self.nu.x) )
+        dis_sq = sum( (self.mu.x-self.nu.x) ** 2 )
         for i in range(0, len(self.mu.a)):
             for j in range(0, len(self.nu.a)):
-                self.Mlm[i][j] = self.Mlm_matrix_elememt_gen(self.X_p[i][j], self.a_p[i][j], p)
-                scale_factor = np.exp(-self.a_k[i][j] * dis_sq)
-                self.Mlm[i][j].scale(scale_factor)
+                self.Mlm_array[i][j] = self.Mlm_matrix_elememt_gen(self.X_p[i][j], self.a_p[i][j], p)
+                scale_factor = np.exp(-self.a_k[i][j] * dis_sq) * self.d[i][j]
+                self.Mlm_array[i][j].scale(scale_factor)
 
     def Mlm_matrix_elememt_gen(self, X_p, a_p, p):
         pow_max = self.mu.pow + self.nu.pow
 
         C_t = np.zeros(pow_max[0]+1)
         for t in range(0, pow_max[0]+1):
-            for i in range(0, min(self.mu.pow[0], t)+1):
+            for i in range(max(0, t-self.nu.pow[0]), min(self.mu.pow[0], t)+1):
                 C_t[t] += binom(self.mu.pow[0], i) * np.power(X_p[0] - self.mu.x[0], self.mu.pow[0]-i) \
                     * binom(self.nu.pow[0], t-i) * np.power(X_p[0] - self.nu.x[0], self.nu.pow[0]-t+i)
-            print( "t=", t, "; C_t=", C_t[t])
+            #print("t=", t, "; C_t=", C_t[t])
+
 
         C_u = np.zeros(pow_max[1]+1)
         for t in range(0, pow_max[1]+1):
-            for i in range(0, min(self.mu.pow[1], t)+1):
+            for i in range(max(0, t-self.nu.pow[1]), min(self.mu.pow[1], t)+1):
                 C_u[t] += binom(self.mu.pow[1], i) * np.power(X_p[1] - self.mu.x[1], self.mu.pow[1]-i) \
                     * binom(self.nu.pow[1], t-i) * np.power(X_p[1] - self.nu.x[1], self.nu.pow[1]-t+i)
-            print( "u=", t, "; C_u=", C_u[t])
+            #print("u=", t, "; C_u=", C_u[t])
 
         C_v = np.zeros(pow_max[2]+1)
         for t in range(0, pow_max[2]+1):
-            for i in range(0, min(self.mu.pow[2], t)+1):
+            for i in range(max(0, t-self.nu.pow[2]), min(self.mu.pow[2], t)+1):
                 C_v[t] += binom(self.mu.pow[2], i) * np.power(X_p[2] - self.mu.x[2], self.mu.pow[2]-i) \
                     * binom(self.nu.pow[2], t-i) * np.power(X_p[2] - self.nu.x[2], self.nu.pow[2]+i-t)
-            print( "v=", t, "; C_v=", C_v[t])
+            #print("v=", t, "; C_v=", C_v[t])
 
         Mlm = Vlm(p)
         for t in range(0, len(C_t)):
@@ -101,7 +108,7 @@ class STO_3G:
     def H(n,l):
         if n==1 and l==0:
             a = np.array([3.42525091, 0.62391373, 0.16885540])
-            d = np.array([0.15432897, 0.53532814, 0.44463454])
+            d = np.array([2.7693e-01, 2.6784e-01, 8.3474e-02])
         else:
             raise Exception("No basis information for current quantum numbers")
 
@@ -110,13 +117,13 @@ class STO_3G:
     def C(n,l):
         if n==1 and l==0:
             a = np.array([71.6168370, 13.0450960, 3.5305122])
-            d = np.array([0.15432897, 0.53532814, 0.44463454])
+            d = np.array([2.7078e+00, 2.6189e+00, 8.1619e-01])
         elif n==2:
             a = np.array([2.9412494, 0.6834831, 0.2222899])
             if l==0:
-                d = np.array([-0.09996723, 0.39951283, 0.70011547])
+                d = np.array([-1.6002e-01, 2.1404e-01, 1.6154e-01])
             elif l==1:
-                d = np.array([0.15591627, 0.60768372, 0.39195739])
+                d = np.array([8.5604e-01, 5.3830e-01, 8.5276e-02])
         else:
             raise Exception("No basis information for current quantum numbers")
 

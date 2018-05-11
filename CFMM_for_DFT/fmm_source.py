@@ -89,12 +89,12 @@ class ggq_dist(abstract_source):
 
 
         elif t==1 and u==0 and v==0:
-            w10 = self.k * factor2 * factor1 / 2
-            self.Mlm.setlm(1, 0,  w10)
+            w11 = self.k * factor2 * factor1 / 2
+            self.Mlm.setlm(1, 1,  w11)
 
         elif t==0 and u==0 and v==1:
-            w11 = self.k * factor2 * factor1
-            self.Mlm.setlm(1, 1, w11)
+            w10 = self.k * factor2 * factor1
+            self.Mlm.setlm(1, 0, w10)
 
         elif t==2 and u==0 and v==0:
             w00 = self.k * factor2 * factor1
@@ -105,11 +105,11 @@ class ggq_dist(abstract_source):
             self.Mlm.setlm(2, 2, w22)
 
         elif t==1 and u==1 and v==0:
-            w22 = - self.k * factor2 * factor1 * 1j / 4
+            w22 = - self.k * (factor2**2) * factor1 * 1j / 4
             self.Mlm.setlm(2, 2, w22)
 
         elif t==1 and u==0 and v==1:
-            w21 = self.k * factor2 * factor1 / 2
+            w21 = self.k * (factor2**2) * factor1 / 2
             self.Mlm.setlm(2, 1, w21)
 
         elif t==0 and u==0 and v==2:

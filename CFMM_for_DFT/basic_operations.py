@@ -143,7 +143,7 @@ class operation:
         """
         scale_factor = np.zeros(2)
         scale_factor[0] = np.min(x) #a
-        scale_factor[1] = (np.max(x) - scale_factor[0]) * (1+1e-8)
+        scale_factor[1] = (np.max(x) - scale_factor[0]) * (1+1e-8) #b
         scalar = 1 / scale_factor[1] #b
         y = (x - scale_factor[0]) * scalar
         return [y, scale_factor]
